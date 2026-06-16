@@ -30,13 +30,34 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# 4. 가장 호환성이 높은 모델로 에이전트 선언
-# 구형 API 대역(v1beta)에서도 100% 작동하는 명칭입니다.
-MODEL_NAME = "gemini-1.5-flash"
+# =================================================================
+# 💡 [핵심 수정] 4. 내 API 키로 사용 가능한 모델 자동 검색 및 설정
+# =================================================================
+available_models = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
+print(f"✅ 사용 가능한 모델 목록: {available_models}") # Render 로그에서 확인 가능
+
+# 사용 가능한 모델 중 가장 빠르고 최신인 'flash' 모델을 자동으로 찾아냅니다.
+target_model_name = available_models[0] # 만약을 대비한 기본값
+for m_name in available_models:
+    if "flash" in m_name:
+        target_model_name = m_name
+
+# 구글 API 규칙에 맞춰 'models/' 글자가 있으면 깔끔하게 떼어냅니다.
+MODEL_NAME = target_model_name.replace("models/", "")
+print(f"🚀 최종 연결된 모델: {MODEL_NAME}")
+
 model = genai.GenerativeModel(
     model_name=MODEL_NAME,
     system_instruction="당신은 구글 클라우드와 파이썬 기술을 지원하는 친절하고 유능한 AI 전문가 에이전트입니다. 답변은 명확하고 단계별로 제공하세요."
 )
+# =================================================================
+# 4. 가장 호환성이 높은 모델로 에이전트 선언
+# 구형 API 대역(v1beta)에서도 100% 작동하는 명칭입니다.
+#MODEL_NAME = "gemini-1.5-flash"
+#model = genai.GenerativeModel(
+#    model_name=MODEL_NAME,
+#    system_instruction="당신은 구글 클라우드와 파이썬 기술을 지원하는 친절하고 유능한 AI 전문가 에이전트입니다. 답변은 명확하고 단계별로 제공하세요."
+#)
 
 # 5. 요청 데이터 구조 정의
 class UserRequest(BaseModel):
