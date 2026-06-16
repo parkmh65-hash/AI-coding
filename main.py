@@ -7,9 +7,16 @@ from pydantic import BaseModel
 import google.generativeai as genai
 
 # 1. API 키 설정 및 원본 SDK 초기화
-API_KEY = "AIzaSyC7_UMRV51iHGrAFtDGTAyPraZTBXrEfb0"
-os.environ["GOOGLE_API_KEY"] = API_KEY
-genai.configure(api_key=API_KEY)
+#API_KEY = "AIzaSyC7_UMRV51iHGrAFtDGTAyPraZTBXrEfb0"
+#os.environ["GOOGLE_API_KEY"] = API_KEY
+#genai.configure(api_key=API_KEY)
+
+import os
+import google.generativeai as genai
+
+# 환경 변수에서 API 키를 불러옵니다.
+GOOGLE_API_KEY = os.environ.get("GOOGLE_API_KEY")
+genai.configure(api_key=GOOGLE_API_KEY)
 
 # 2. FastAPI 앱 초기화
 app = FastAPI(title="Gemini AI Agent Server")
@@ -25,7 +32,7 @@ app.add_middleware(
 
 # 4. 가장 호환성이 높은 모델로 에이전트 선언
 # 구형 API 대역(v1beta)에서도 100% 작동하는 명칭입니다.
-MODEL_NAME = "gemini-2.5-flash"
+MODEL_NAME = "gemini-1.5-flash"
 model = genai.GenerativeModel(
     model_name=MODEL_NAME,
     system_instruction="당신은 구글 클라우드와 파이썬 기술을 지원하는 친절하고 유능한 AI 전문가 에이전트입니다. 답변은 명확하고 단계별로 제공하세요."
