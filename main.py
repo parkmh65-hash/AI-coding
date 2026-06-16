@@ -35,7 +35,7 @@ async def chat_endpoint(request: UserRequest):
 
         # 2. 신형 SDK 방식으로 모델 호출 및 시스템 프롬프트 설정
         response = client.models.generate_content(
-            model='gemini-1.5-flash', # ✅ 이렇게 1.5로 변경해 주세요!
+            model='gemini-2.5-flash', # ✅ 이렇게 1.5로 변경해 주세요!
             contents=request.message,
             config=types.GenerateContentConfig(
                 system_instruction="당신은 구글 클라우드와 파이썬 기술을 지원하는 친절하고 유능한 AI 전문가 에이전트입니다. 답변은 명확하고 단계별로 제공하세요.",
