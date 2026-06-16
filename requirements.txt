@@ -1,4 +1,4 @@
-Flask
+fastapi
+uvicorn
 pandas
 scikit-learn
-gunicorn
