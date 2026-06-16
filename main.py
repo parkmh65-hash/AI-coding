@@ -27,7 +27,7 @@ def read_root():
 async def chat_endpoint(request: UserRequest):
     try:
         # 1. 환경 변수에서 새 API 키를 불러와 클라이언트 초기화
-        api_key = os.environ.get("GOOGLE_API_KEY")
+        api_key = os.environ.get("GEMINI_API_KEY")
         if not api_key:
             raise ValueError("API 키가 환경 변수에 없습니다.")
             
