@@ -2,4 +2,4 @@ fastapi
 uvicorn
 pandas
 scikit-learn
-google-generativeai
+google-genai
