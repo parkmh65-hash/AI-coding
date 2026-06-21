@@ -1,17 +1,17 @@
 import os
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
-# 💡 신형 라이브러리 임포트
-from google import genai
 
+from google import genai
 from google.genai import types
-from pydantic import BaseModel
-from typing import List, Dict, Any, Optional
 from openai import OpenAI
-import os
+
 import json
 from dotenv import load_dotenv
+
+from pydantic import BaseModel
+from typing import List, Dict, Any, Optional
+from collections import defaultdict
 
 # 사용자 정의 함수(tools) 불러오기
 from gpt_functions import get_current_time, tools, get_yf_stock_info, get_yf_stock_history, get_yf_stock_recommendations
@@ -67,64 +67,144 @@ async def chat_endpoint(request: UserRequest):
         print(f"❌ 백엔드 에러 발생 원인: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
+
+client = OpenAI(api_key=api_key)  # 오픈AI 클라이언트의 인스턴스 생성
+
+# 작성해주신 Tool Chunk 조립 함수
+def tool_list_to_tool_obj(tools_chunk_list):
+    # 기본 값을 가진 딕셔너리 초기화
+    tool_calls_dict = defaultdict(lambda: {"id": None, "function": {"arguments": "", "name": None}, "type": None})
+
+    # 도구(함수) 호출을 반복하여 처리
+    for tool_call in tools_chunk_list:
+        # id가 None이 아닌 경우 설정
+        if tool_call.id is not None:
+            tool_calls_dict[tool_call.index]["id"] = tool_call.id
+
+        # 함수 이름이 None이 아닌 경우 설정
+        if tool_call.function.name is not None:
+            tool_calls_dict[tool_call.index]["function"]["name"] = tool_call.function.name
+
+        # 인수 추가 (chunk 단위로 들어오므로 문자열 연결)
+        if tool_call.function.arguments is not None:
+            tool_calls_dict[tool_call.index]["function"]["arguments"] += tool_call.function.arguments
+
+        # 타입이 None이 아닌 경우 설정
+        if tool_call.type is not None:
+            tool_calls_dict[tool_call.index]["type"] = tool_call.type
+
+    # 딕셔너리를 리스트로 변환
+    tool_calls_list = list(tool_calls_dict.values())
+    return {"tool_calls": tool_calls_list}  
+
+# 스트리밍을 지원하는 OpenAI 호출 함수
+def get_ai_response(messages, tools=None, stream=True):
+    response = client.chat.completions.create(
+        model="gpt-4o",  
+        stream=stream, 
+        messages=messages,  
+        tools=tools,  
+    )
+    if stream: 
+        for chunk in response:
+            yield chunk  
+    else:
+        return response  
+
+# 클라이언트로부터 받을 대화 모델 정의
+class ChatRequest(BaseModel):
+    messages: List[Dict[str, Any]]
+
 @app.post("/stock")
 async def chat_endpoint(request: ChatRequest):
     try:
         messages = request.messages
         
-        # 1. 사용자의 전체 대화 기록을 바탕으로 OpenAI API 1차 호출
-        response = client.chat.completions.create(
-            model="gpt-4o",
-            messages=messages,
-            tools=tools,
-        )
-        ai_message = response.choices[0].message
+        # 1. 사용자의 전체 대화 기록을 바탕으로 스트리밍 호출
+        ai_response = get_ai_response(messages, tools=tools, stream=True)
         
-        # 2. AI가 도구(함수) 호출이 필요하다고 판단한 경우
-        if ai_message.tool_calls:
-            # 🚨 중요: 도구를 호출한 AI의 응답 자체도 대화 기록에 추가해야 에러가 나지 않음
-            messages.append(ai_message.model_dump(exclude_unset=True))
+        content = ''
+        tool_calls_chunk = []   
+        
+        print("\n[AI 응답 스트리밍]: ", end="")
+        for chunk in ai_response:
+            if not chunk.choices: continue
+            delta = chunk.choices[0].delta
             
-            for tool_call in ai_message.tool_calls:
-                tool_name = tool_call.function.name
-                tool_call_id = tool_call.id
-                arguments = json.loads(tool_call.function.arguments)
+            if delta.content: 
+                print(delta.content, end="") 
+                content += delta.content 
+            
+            if delta.tool_calls:
+                tool_calls_chunk += delta.tool_calls 
+
+        tool_calls = []
+        if tool_calls_chunk:
+            tool_obj = tool_list_to_tool_obj(tool_calls_chunk)
+            tool_calls = tool_obj["tool_calls"]   
+
+        # 2. 도구 호출이 판단된 경우
+        if len(tool_calls) > 0: 
+            print("\n[호출된 도구 목록]:", tool_calls)
+            
+            # 🚨 중요: 도구를 호출한 AI의 결정 자체를 대화 기록에 넣어야 오류가 나지 않음
+            messages.append({
+                "role": "assistant",
+                "content": content if content else None,
+                "tool_calls": tool_calls
+            })
+
+            for tool_call in tool_calls:
+                tool_name = tool_call["function"]["name"]  
+                tool_call_id = tool_call["id"]         
+                arguments = json.loads(tool_call["function"]["arguments"])     
                 
                 # 함수 실행
                 if tool_name == "get_current_time":  
                     func_result = get_current_time(timezone=arguments.get('timezone'))
                 elif tool_name == "get_yf_stock_info":
                     func_result = get_yf_stock_info(ticker=arguments.get('ticker'))
-                elif tool_name == "get_yf_stock_history":
+                elif tool_name == "get_yf_stock_history":  
                     func_result = get_yf_stock_history(
                         ticker=arguments.get('ticker'), 
                         period=arguments.get('period')
                     )
-                elif tool_name == "get_yf_stock_recommendations":
+                elif tool_name == "get_yf_stock_recommendations":  
                     func_result = get_yf_stock_recommendations(
                         ticker=arguments.get('ticker')
                     )
                 else:
-                    func_result = "지원하지 않는 함수입니다."
+                    func_result = "지원하지 않는 기능입니다."
 
-                # 3. 함수 실행 결과를 역할(role)="tool"로 지정하여 대화 기록에 추가
+                # 🚨 주의: 최근 OpenAI API 규칙에 맞춰 role을 "function"이 아닌 "tool"로 고정합니다.
                 messages.append({
                     "role": "tool",
                     "tool_call_id": tool_call_id,
                     "name": tool_name,
                     "content": str(func_result),
                 })
-            
-            # 4. 함수 결과를 바탕으로 최종 답변 생성을 위한 2차 OpenAI API 호출
-            response = client.chat.completions.create(
-                model="gpt-4o",
-                messages=messages,
-                tools=tools,
-            )
-            ai_message = response.choices[0].message
 
-        # 최종적으로 생성된 텍스트 응답만 클라이언트(React)로 반환
-        return {"role": "assistant", "content": ai_message.content}
+            messages.append({
+                "role": "system", 
+                "content": "이제 주어진 결과를 바탕으로 답변할 차례다."
+            }) 
+            
+            # 3. 함수 결과를 바탕으로 최종 답변을 다시 스트리밍
+            ai_response2 = get_ai_response(messages, tools=tools, stream=True) 
+            content = ""
+            print("\n[AI 최종 답변 스트리밍]: ", end="")
+            for chunk in ai_response2:
+                if not chunk.choices: continue
+                delta = chunk.choices[0].delta
+                if delta.content:
+                    print(delta.content, end='')
+                    content += delta.content
+
+        print("\n====================")
+        
+        # 클라이언트(React)에는 하나로 합쳐진 최종 텍스트만 전달합니다.
+        return {"role": "assistant", "content": content}
         
     except Exception as e:
+        print("서버 에러:", e)
         raise HTTPException(status_code=500, detail=str(e))
