@@ -17,7 +17,15 @@ from collections import defaultdict
 from gpt_functions import get_current_time, tools, get_yf_stock_info, get_yf_stock_history, get_yf_stock_recommendations
 
 load_dotenv()
-api_key = os.getenv("OPENAI_API_KEY")
+api_key = os.getenv("OPENAI_API_KEY")  # 환경 변수에서 API 키 가져오기
+
+# 🚨 Render 배포 시 환경 변수 누락을 방지하고 명확한 에러를 띄우기 위한 안전장치
+if not api_key:
+    raise ValueError("🚨 OPENAI_API_KEY가 설정되지 않았습니다! Render 대시보드의 'Environment' 탭에서 환경 변수를 반드시 등록해주세요.")
+
+# 🚨 추가된 핵심 해결책: Render 대시보드에 키를 입력할 때 실수로 들어간 줄바꿈, 공백, 'pip' 글자를 코드가 알아서 완벽하게 청소합니다!
+api_key = api_key.replace('\r', '').replace('\n', '').replace('pip', '').strip()
+
 
 app = FastAPI(title="Gemini AI Agent Server")
 
