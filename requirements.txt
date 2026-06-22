@@ -7,3 +7,5 @@ openai
 python-dotenv
 yfinance
 tabulate
+langchain-openai
+pydantic
