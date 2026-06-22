@@ -10,6 +10,8 @@ from langchain_openai import ChatOpenAI
 from langchain_core.messages import SystemMessage, HumanMessage, AIMessage, ToolMessage
 from langchain_core.tools import tool
 
+from langchain_core.chat_history import InMemoryChatMessageHistory
+from langchain_core.runnables.history import RunnableWithMessageHistory
 app = FastAPI()
 
 # CORS 설정 (다양한 환경에서의 호출 허용)
@@ -20,6 +22,8 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
 
 # 도구 함수 정의
 @tool
@@ -73,4 +77,38 @@ def chat_endpoint(request: ChatRequest):
             lc_messages.append(tool_msg)
 
     # 3. 최종 응답 반환
+    return {"role": "assistant", "content": response.content}
+
+
+
+# 세션별 대화 기록을 저장할 전역 딕셔너리
+store = {}
+
+def get_session_history(session_id: str):
+    if session_id not in store:
+        store[session_id] = InMemoryChatMessageHistory()
+        # 세션이 처음 생성될 때 시스템 메시지 추가
+        store[session_id].add_message(SystemMessage(content="너는 사용자의 질문에 친절히 답하는 AI챗봇이다."))
+    return store[session_id]
+
+# 모델 및 History 체인 설정
+llm = ChatOpenAI(model="gpt-4o-mini")
+with_message_history = RunnableWithMessageHistory(llm, get_session_history)
+
+# 프론트엔드에서 받을 데이터 구조
+class ChatRequest(BaseModel):
+    session_id: str
+    message: str
+
+@app.post("/chat-1")
+def chat_endpoint(request: ChatRequest):
+    # 요청받은 session_id로 설정
+    config = {"configurable": {"session_id": request.session_id}}
+    
+    # GAS 프론트엔드 연동을 위해 stream 대신 invoke 사용
+    response = with_message_history.invoke(
+        [HumanMessage(content=request.message)], 
+        config=config
+    )
+    
     return {"role": "assistant", "content": response.content}
