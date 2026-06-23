@@ -63,6 +63,7 @@ class ChatRequest(BaseModel):
     session_id: str
     message: str
 
+
 @app.get("/")
 def read_root():
     return {
