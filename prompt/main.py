@@ -14,7 +14,15 @@ from typing import List, Dict, Any, Optional
 from collections import defaultdict
 
 # 사용자 정의 함수(tools) 불러오기
-from gpt_functions import get_current_time, tools, get_yf_stock_info, get_yf_stock_history, get_yf_stock_recommendations
+from .gpt_functions import get_current_time, tools, get_yf_stock_info, get_yf_stock_history, get_yf_stock_recommendations
+# from gpt_functions import ... 대신 아래와 같이 점(.)을 사용
+#from .gpt_functions import get_current_time, tools, ... 
+
+#import sys
+#import os
+# 루트 디렉토리를 경로에 추가하여 인식하게 함
+#sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+#from gpt_functions import get_current_time, tools, ...
 
 load_dotenv()
 api_key = os.getenv("OPENAI_API_KEY")  # 환경 변수에서 API 키 가져오기
