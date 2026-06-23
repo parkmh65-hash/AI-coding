@@ -65,7 +65,10 @@ class ChatRequest(BaseModel):
 
 @app.get("/")
 def read_root():
-    return {"status": "online", "message": "API 서버가 실행 중입니다. /docs 에서 문서를 확인하세요."
+    return {
+        "status": "online", 
+        "message": "API 서버가 실행 중입니다. /docs 에서 문서를 확인하세요."
+    }
             
 @app.post("/chat")
 def chat_endpoint(request: ChatRequest):
