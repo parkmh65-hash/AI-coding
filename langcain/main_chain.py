@@ -13,6 +13,7 @@ from dotenv import load_dotenv # 이 줄이 없어서 에러가 발생한 것입
 # dotenv가 설치되어 있다면 환경 변수 로드
 load_dotenv()
 
+
 # 키가 제대로 들어오는지 확인 (로그에 키 전체를 찍지는 마세요!)
 api_key = os.getenv("OPENAI_API_KEY")
 if not api_key:
@@ -62,6 +63,10 @@ class ChatRequest(BaseModel):
     session_id: str
     message: str
 
+@app.get("/")
+def read_root():
+    return {"status": "online", "message": "API 서버가 실행 중입니다. /docs 에서 문서를 확인하세요."
+            
 @app.post("/chat")
 def chat_endpoint(request: ChatRequest):
     session_id = request.session_id
