@@ -43,3 +43,43 @@ async def chat(request: Request):
     )
     
     return {"reply": response.content}
+
+#두번째 챗봇
+llm2 = ChatOpenAI(model="gpt-4o-mini")
+
+@tool
+def get_current_time(timezone: str, location: str) -> str:
+    """현재 시각을 반환하는 함수."""
+    try:
+        tz = pytz.timezone(timezone)
+        now = datetime.now(tz).strftime("%Y-%m-%d %H:%M:%S")
+        return f'{timezone} ({location}) 현재시각 {now}'
+    except:
+        return f"알 수 없는 타임존: {timezone}"
+
+tools = [get_current_time]
+llm_with_tools = llm2.bind_tools(tools)
+
+@app.post("/chat1")
+async def chat(request: Request):
+    data = await request.json()
+    messages = data.get("messages", [])
+    
+    # 메시지 객체 복원
+    formatted_messages = []
+    for m in messages:
+        if m["type"] == "human": formatted_messages.append(HumanMessage(m["content"]))
+        elif m["type"] == "ai": formatted_messages.append(AIMessage(m["content"]))
+        elif m["type"] == "tool": formatted_messages.append(ToolMessage(content=m["content"], tool_call_id=m["tool_call_id"]))
+
+    response = llm_with_tools.invoke(formatted_messages)
+    
+    if response.tool_calls:
+        tool_call = response.tool_calls[0]
+        tool_result = get_current_time.invoke(tool_call)
+        # 도구 실행 후 최종 응답 생성
+        final_msg = llm_with_tools.invoke(formatted_messages + [response, ToolMessage(content=tool_result, tool_call_id=tool_call['id'])])
+        return {"content": final_msg.content}
+    
+    return {"content": response.content}
+    
