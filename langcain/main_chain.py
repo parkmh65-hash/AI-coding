@@ -5,6 +5,7 @@ from langchain_openai import ChatOpenAI
 from langchain_core.chat_history import InMemoryChatMessageHistory
 from langchain_core.runnables.history import RunnableWithMessageHistory
 from langchain_core.messages import HumanMessage, SystemMessage
+from langchain_core.tools import tool # 이 라인이 반드시 있어야 합니다.
 
 app = FastAPI()
 
