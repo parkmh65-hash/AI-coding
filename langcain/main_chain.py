@@ -9,6 +9,14 @@ from langchain_openai import ChatOpenAI
 from langchain_core.messages import SystemMessage, HumanMessage
 from langchain_core.tools import tool
 
+# dotenv가 설치되어 있다면 환경 변수 로드
+load_dotenv()
+
+# 키가 제대로 들어오는지 확인 (로그에 키 전체를 찍지는 마세요!)
+api_key = os.getenv("OPENAI_API_KEY")
+if not api_key:
+    print("에러: OPENAI_API_KEY가 설정되지 않았습니다.")
+    
 app = FastAPI()
 
 # CORS 설정
@@ -34,7 +42,13 @@ def get_current_time(timezone: str, location: str) -> str:
         return f"알 수 없는 타임존: {timezone}"
 
 # 2. 모델 및 도구 바인딩
-llm = ChatOpenAI(model="gpt-4o-mini")
+#llm = ChatOpenAI(model="gpt-4o-mini")
+llm = ChatOpenAI(
+    model="gpt-4o_mini",
+    openai_api_key=os.getenv("OPENAI_API_KEY"),
+    request_timeout=60  # 60초로 설정
+)
+
 tools = [get_current_time]
 tool_dict = {"get_current_time": get_current_time}
 llm_with_tools = llm.bind_tools(tools)
