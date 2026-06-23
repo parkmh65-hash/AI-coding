@@ -8,6 +8,7 @@ from datetime import datetime
 from langchain_openai import ChatOpenAI
 from langchain_core.messages import SystemMessage, HumanMessage
 from langchain_core.tools import tool
+from dotenv import load_dotenv # 이 줄이 없어서 에러가 발생한 것입니다
 
 # dotenv가 설치되어 있다면 환경 변수 로드
 load_dotenv()
