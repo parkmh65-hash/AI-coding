@@ -8,13 +8,11 @@ from datetime import datetime
 from langchain_openai import ChatOpenAI
 from langchain_core.messages import SystemMessage, HumanMessage
 from langchain_core.tools import tool
-from dotenv import load_dotenv # 이 줄이 없어서 에러가 발생한 것입니다
+from dotenv import load_dotenv
 
-# dotenv가 설치되어 있다면 환경 변수 로드
+# 환경 변수 로드
 load_dotenv()
 
-
-# 키가 제대로 들어오는지 확인 (로그에 키 전체를 찍지는 마세요!)
 api_key = os.getenv("OPENAI_API_KEY")
 if not api_key:
     print("에러: OPENAI_API_KEY가 설정되지 않았습니다.")
@@ -38,17 +36,15 @@ def get_current_time(timezone: str, location: str) -> str:
         tz = pytz.timezone(timezone)
         now = datetime.now(tz).strftime("%Y-%m-%d %H:%M:%S")
         result = f'{timezone} ({location}) 현재시각 {now}'
-        print(f"🛠️ [도구 실행됨] {result}")
         return result
     except pytz.UnknownTimeZoneError:
         return f"알 수 없는 타임존: {timezone}"
 
 # 2. 모델 및 도구 바인딩
-#llm = ChatOpenAI(model="gpt-4o-mini")
 llm = ChatOpenAI(
-    model="gpt-4o_mini",
-    openai_api_key=os.getenv("OPENAI_API_KEY"),
-    request_timeout=60  # 60초로 설정
+    model="gpt-4o-mini", # 밑줄(_)을 하이픈(-)으로 수정
+    openai_api_key=api_key,
+    request_timeout=60
 )
 
 tools = [get_current_time]
@@ -58,11 +54,9 @@ llm_with_tools = llm.bind_tools(tools)
 # 세션별 대화 기록 저장소
 store = {}
 
-# 프론트엔드 요청 데이터 모델
 class ChatRequest(BaseModel):
     session_id: str
     message: str
-
 
 @app.get("/")
 def read_root():
@@ -75,30 +69,23 @@ def read_root():
 def chat_endpoint(request: ChatRequest):
     session_id = request.session_id
     
-    # 세션이 처음이면 시스템 메시지 추가
     if session_id not in store:
         store[session_id] = [
             SystemMessage(content="너는 사용자를 돕기 위해 최선을 다하는 인공지능 봇이다.")
         ]
     
-    # 사용자 메시지 저장
     store[session_id].append(HumanMessage(content=request.message))
     
-    # 3. AI 응답 및 도구 실행 루프 (Streamlit의 재귀함수를 while문으로 안전하게 변환)
     while True:
-        # 모델 호출
         response = llm_with_tools.invoke(store[session_id])
         store[session_id].append(response)
         
-        # 도구 호출(tool_calls)이 없으면 루프를 종료하고 최종 답변 반환
         if not response.tool_calls:
             break
             
-        # 도구 호출이 있다면 도구를 실행하고 결과를 다시 대화 기록에 추가
         for tool_call in response.tool_calls:
             selected_tool = tool_dict[tool_call['name']]
             tool_msg = selected_tool.invoke(tool_call)
             store[session_id].append(tool_msg)
             
-    # 최종적으로 완성된 텍스트 응답만 프론트엔드에 전달
     return {"role": "assistant", "content": response.content}
