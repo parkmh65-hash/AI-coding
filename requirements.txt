@@ -16,3 +16,4 @@ langchain==0.3.0
 langchain-openai==0.2.0
 openai>=1.40.0,<2.0.0
 langchain-chroma
+chromadb==0.5.5
