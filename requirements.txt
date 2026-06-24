@@ -9,3 +9,9 @@ yfinance
 tabulate
 langchain-openai
 pydantic
+
+fastapi==0.104.1
+uvicorn==0.23.2
+langchain==0.3.0
+langchain-openai==0.2.0
+openai==1.10.0
