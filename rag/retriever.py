@@ -18,7 +18,7 @@ llm = ChatOpenAI(model="gpt-4o")
 # 2. ChromaDB 로드 (Render 호환 경로 설정)
 # C드라이브 절대경로 대신, 프로젝트 루트 기준의 상대 경로를 사용합니다.
 # GitHub에 코드를 올릴 때 'chroma_store' 폴더도 같이 업로드되어야 작동합니다.
-persist_directory = os.getenv('CHROMA_PERSIST_DIR', './chroma_store')
+persist_directory = os.getenv('CHROMA_PERSIST_DIR', './rag/chroma_store')
 
 print(f"Loading existing Chroma store from: {persist_directory}")
 vectorstore = Chroma(
