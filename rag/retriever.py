@@ -9,7 +9,7 @@ llm = ChatOpenAI(model="gpt-4o")
 # Load Chroma store
 from langchain_chroma import Chroma
 print("Loading existing Chroma store")
-persist_directory = 'C:/github/gpt_agent_2025_easyspub/chap09/chroma_store'
+persist_directory = './rag/chroma_store'
 
 vectorstore = Chroma(
     persist_directory=persist_directory, 
