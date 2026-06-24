@@ -2,8 +2,12 @@ from fastapi import FastAPI
 from pydantic import BaseModel
 from typing import List, Any
 from langchain_openai import ChatOpenAI
+
+
 # retriever 모듈은 별도 파일로 구성하여 import 하세요 [cite: 30]
 # 현재 파일이 있는 디렉토리를 파이썬 경로에 추가
+import sys
+
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 import retriever 
 
