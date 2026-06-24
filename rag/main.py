@@ -18,6 +18,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+
 # 설정
 os.environ["OPENAI_API_KEY"] = "YOUR_API_KEY"
 persist_directory = './chroma_store' # Render 배포 시 경로 주의
