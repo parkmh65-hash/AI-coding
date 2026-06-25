@@ -428,7 +428,14 @@ RAG 검색 결과:
 
 def run(query: str, history: list):
 
+    print("====================")
+    print("CHAT START")
+    print(query)
+    print("====================")
+
     init_rag()
+
+    print("RAG OK")
 
     lc_history = []
 
@@ -458,10 +465,14 @@ def run(query: str, history: list):
             }
         )
     )
+    
+    print("QUERY AUGMENT OK")
 
     docs = retriever.invoke(
         f"{query}\n{augmented_query}"
     )
+    
+    print("RETRIEVE OK", len(docs))
 
     rag_context = "\n\n".join(
         [
@@ -488,10 +499,13 @@ def run(query: str, history: list):
 
     tool_log = []
 
-    _run_loop(
+    def _run_loop(
         messages,
         tool_log,
-    )
+        depth=0,
+    ):
+
+    print("TOOL LOOP", depth)
 
     for msg in reversed(messages):
 
