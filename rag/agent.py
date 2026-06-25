@@ -499,32 +499,9 @@ def run(query: str, history: list):
 
     tool_log = []
 
-    def _run_loop(
-        messages,
-        tool_log,
-        depth=0,
-    ):
-
-    print("TOOL LOOP", depth)
-
-    for msg in reversed(messages):
-
-        if (
-            isinstance(msg, AIMessage)
-            and msg.content
-        ):
-            return {
-                "answer": msg.content,
-                "tool_log": tool_log,
-                "augmented_query": augmented_query,
-            }
-
-    return {
-        "answer": "(응답 없음)",
-        "tool_log": tool_log,
-        "augmented_query": augmented_query,
-    }
-
+# ============================================================
+# TOOL LOOP
+# ============================================================
 
 def _run_loop(
     messages,
@@ -595,3 +572,4 @@ def _run_loop(
         tool_log,
         depth + 1,
     )
+
