@@ -25,7 +25,7 @@ if not api_key:
 os.environ["OPENAI_API_KEY"] = api_key.strip()
 
 import agent   # 키 설정 완료 후 import
-
+import retriever
 # ── 2. FastAPI 앱 ─────────────────────────────────────────────
 app = FastAPI(title="GPT-4o Langchain Chat API")
 
