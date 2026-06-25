@@ -19,7 +19,12 @@ from langchain_classic.chains.combine_documents import create_stuff_documents_ch
 # ── 1. 설정 ───────────────────────────────────────────────────
 # Render 무료 플랜은 /tmp 만 쓰기 가능
 persist_directory = os.getenv("CHROMA_PERSIST_DIR", "/tmp/chroma_store")
-data_directory    = "./data"
+
+from pathlib import Path
+BASE_DIR = Path(__file__).resolve().parent
+data_directory = BASE_DIR / "data"
+pdf_files = list(data_directory.glob("*.pdf"))
+print(pdf_files)
 
 embedding = OpenAIEmbeddings(model="text-embedding-3-large")
 llm       = ChatOpenAI(model="gpt-4o")
