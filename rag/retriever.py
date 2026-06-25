@@ -12,10 +12,10 @@ from langchain_openai import OpenAIEmbeddings, ChatOpenAI
 from langchain_chroma import Chroma
 from langchain_community.document_loaders import PyPDFLoader
 from langchain_text_splitters import RecursiveCharacterTextSplitter
-from langchain.chains.combine_documents import create_stuff_documents_chain
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_core.output_parsers import StrOutputParser
 
+from langchain_classic.chains.combine_documents import create_stuff_documents_chain
 # ── 1. 설정 ───────────────────────────────────────────────────
 # Render 무료 플랜은 /tmp 만 쓰기 가능
 persist_directory = os.getenv("CHROMA_PERSIST_DIR", "/tmp/chroma_store")
