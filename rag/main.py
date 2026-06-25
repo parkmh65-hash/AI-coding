@@ -78,5 +78,7 @@ async def chat(request: ChatRequest):
 # ── 5. 로컬 실행 ──────────────────────────────────────────────
 if __name__ == "__main__":
     import uvicorn
+    # Render가 제공하는 포트를 사용하되, 없으면 기본값으로 8000 사용
     port = int(os.environ.get("PORT", 8000))
-    uvicorn.run(app, host="0.0.0.0", port=port)
+    # host는 반드시 "0.0.0.0"으로 설정해야 외부 접속이 가능합니다.
+    uvicorn.run("main:app", host="0.0.0.0", port=port, reload=False)
