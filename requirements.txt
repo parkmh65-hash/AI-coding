@@ -12,8 +12,9 @@ pydantic
 fastapi
 uvicorn
 openai
+pypdf
 langchain
 langchain-openai
 langchain-chroma
+langchain-community
 langchain-core
-pypdf
