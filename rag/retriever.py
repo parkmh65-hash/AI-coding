@@ -1,3 +1,50 @@
+import os
+from langchain_openai import OpenAIEmbeddings, ChatOpenAI
+from langchain_chroma import Chroma
+from langchain_community.document_loaders import PyPDFLoader # PDF 로더 예시
+from langchain.text_splitter import RecursiveCharacterTextSplitter
+
+# 1. 환경 변수 및 설정
+persist_directory = os.getenv('CHROMA_PERSIST_DIR', './rag/chroma_store')
+data_directory = './rag/data' # 원본 문서(PDF 등)를 넣어둘 폴더
+embedding = OpenAIEmbeddings(model='text-embedding-3-large')
+
+# 2. 자동 빌드 함수
+def build_vectorstore():
+    print("데이터베이스를 새로 빌드합니다...")
+    
+    # data 폴더의 모든 PDF 파일 로드
+    documents = []
+    for filename in os.listdir(data_directory):
+        if filename.endswith(".pdf"):
+            loader = PyPDFLoader(os.path.join(data_directory, filename))
+            documents.extend(loader.load())
+    
+    # 텍스트 분할 (청크 생성)
+    text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
+    texts = text_splitter.split_documents(documents)
+    
+    # 벡터 DB 생성 및 저장
+    vectorstore = Chroma.from_documents(
+        documents=texts, 
+        embedding=embedding, 
+        persist_directory=persist_directory
+    )
+    print("데이터베이스 빌드 완료!")
+    return vectorstore
+
+# 3. 로직 실행
+if not os.path.exists(persist_directory):
+    # 폴더가 없으면 새로 빌드
+    vectorstore = build_vectorstore()
+else:
+    # 이미 폴더가 있으면 기존 DB 로드
+    print("기존 데이터베이스를 불러옵니다.")
+    vectorstore = Chroma(persist_directory=persist_directory, embedding_function=embedding)
+
+retriever = vectorstore.as_retriever(k=3)
+
+
 # 임베딩 모델 선언하기
 from langchain_openai import OpenAIEmbeddings
 embedding = OpenAIEmbeddings(model='text-embedding-3-large')
