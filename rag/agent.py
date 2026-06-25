@@ -1,184 +1,502 @@
 """
 agent.py
-────────
-세 가지 도구(시간 / 웹검색 / 유튜브) + RAG 검색을 함께 처리하는 에이전트.
+───────────────────────────────────────────────
+RAG + Tool Agent 통합 버전
 
-실행 흐름:
-  1. RAG retriever 로 관련 문서 검색
-  2. LLM + 도구 바인딩으로 답변 생성 (tool_call 사이클 최대 5회)
-  3. 최종 텍스트 답변 + 도구 사용 로그 반환
+포함 기능
+- ChromaDB
+- Query Augmentation
+- Time Tool
+- Web Search Tool
+- Youtube Tool
+- Tool Calling Agent
 """
 
 import os
+from pathlib import Path
 from datetime import datetime
 from typing import List
 
 import pytz
-from langchain_openai import ChatOpenAI
-from langchain_core.messages import (
-    SystemMessage, HumanMessage, AIMessage, ToolMessage,
+
+from langchain_openai import (
+    ChatOpenAI,
+    OpenAIEmbeddings,
 )
-from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
+
+from langchain_core.messages import (
+    SystemMessage,
+    HumanMessage,
+    AIMessage,
+)
+
 from langchain_core.tools import tool
 
-from langchain_community.tools import DuckDuckGoSearchResults
-from langchain_community.utilities import DuckDuckGoSearchAPIWrapper
+from langchain_core.prompts import (
+    ChatPromptTemplate,
+    MessagesPlaceholder,
+)
+
+from langchain_core.output_parsers import StrOutputParser
+
+from langchain_chroma import Chroma
+
+from langchain_community.document_loaders import (
+    PyPDFLoader,
+    YoutubeLoader,
+)
+
+from langchain_text_splitters import (
+    RecursiveCharacterTextSplitter,
+)
+
+from langchain_community.tools import (
+    DuckDuckGoSearchResults,
+)
+
+from langchain_community.utilities import (
+    DuckDuckGoSearchAPIWrapper,
+)
 
 from youtube_search import YoutubeSearch
-from langchain_community.document_loaders import YoutubeLoader
 
-import retriever as rag   # RAG 모듈
 
-# ── 모델 초기화 ───────────────────────────────────────────────
+# ============================================================
+# LLM
+# ============================================================
+
 llm = ChatOpenAI(model="gpt-4o-mini")
 
-# ── 도구 정의 ─────────────────────────────────────────────────
+rag_llm = ChatOpenAI(model="gpt-4o")
+
+# ============================================================
+# RAG 초기화
+# ============================================================
+
+persist_directory = os.getenv(
+    "CHROMA_PERSIST_DIR",
+    "/tmp/chroma_store"
+)
+
+BASE_DIR = Path(__file__).resolve().parent
+
+data_directory = BASE_DIR / "data"
+
+embedding = OpenAIEmbeddings(
+    model="text-embedding-3-large"
+)
+
+
+# ============================================================
+# Vector Store 생성
+# ============================================================
+
+def build_vectorstore():
+
+    print("새로운 벡터 DB 생성")
+
+    documents = []
+
+    if not data_directory.exists():
+        raise RuntimeError(
+            f"{data_directory} 폴더가 존재하지 않습니다."
+        )
+
+    for pdf_file in data_directory.glob("*.pdf"):
+
+        print(f"PDF 로딩: {pdf_file.name}")
+
+        loader = PyPDFLoader(str(pdf_file))
+
+        documents.extend(loader.load())
+
+    if not documents:
+        raise RuntimeError(
+            "PDF 문서가 없습니다."
+        )
+
+    splitter = RecursiveCharacterTextSplitter(
+        chunk_size=1000,
+        chunk_overlap=200,
+    )
+
+    texts = splitter.split_documents(documents)
+
+    print(f"청크 수: {len(texts)}")
+
+    return Chroma.from_documents(
+        documents=texts,
+        embedding=embedding,
+        persist_directory=persist_directory,
+    )
+
+
+def chroma_exists():
+
+    if not os.path.isdir(persist_directory):
+        return False
+
+    for root, _, files in os.walk(persist_directory):
+        for file in files:
+            if file.endswith(
+                (
+                    ".sqlite3",
+                    ".parquet",
+                    ".bin",
+                )
+            ):
+                return True
+
+    return False
+
+
+if chroma_exists():
+
+    print("기존 Chroma DB 로드")
+
+    vectorstore = Chroma(
+        persist_directory=persist_directory,
+        embedding_function=embedding,
+    )
+
+else:
+
+    vectorstore = build_vectorstore()
+
+
+retriever = vectorstore.as_retriever(
+    search_kwargs={"k": 3}
+)
+
+# ============================================================
+# Query Augmentation
+# ============================================================
+
+query_augmentation_prompt = (
+    ChatPromptTemplate.from_messages(
+        [
+            MessagesPlaceholder(
+                variable_name="messages"
+            ),
+            (
+                "system",
+                """
+질문의 의도를 파악하여
+검색에 적합한 한 문장으로 변환하라.
+
+{query}
+                """
+            ),
+        ]
+    )
+)
+
+query_augmentation_chain = (
+    query_augmentation_prompt
+    | rag_llm
+    | StrOutputParser()
+)
+
+# ============================================================
+# TOOL
+# ============================================================
+
 @tool
-def get_current_time(timezone: str, location: str) -> str:
-    """현재 시각을 반환하는 함수."""
+def get_current_time(
+    timezone: str,
+    location: str,
+) -> str:
+    """현재 시간을 반환"""
+
     try:
-        tz  = pytz.timezone(timezone)
-        now = datetime.now(tz).strftime("%Y-%m-%d %H:%M:%S")
-        result = f"{timezone} ({location}) 현재시각 {now}"
-        print(result)
-        return result
-    except pytz.UnknownTimeZoneError:
-        return f"알 수 없는 타임존: {timezone}"
+
+        tz = pytz.timezone(timezone)
+
+        now = datetime.now(tz).strftime(
+            "%Y-%m-%d %H:%M:%S"
+        )
+
+        return (
+            f"{location} 현재 시각: {now}"
+        )
+
+    except Exception:
+
+        return "알 수 없는 타임존"
 
 
 @tool
-def get_web_search(query: str, search_period: str) -> str:
+def get_web_search(
+    query: str,
+    search_period: str,
+) -> str:
     """
-    웹 검색을 수행하는 함수.
+    웹 검색
 
-    Args:
-        query (str): 검색어
-        search_period (str): 검색 기간 ("w"=1주, "m"=1달, "y"=1년)
-
-    Returns:
-        str: 검색 결과
+    search_period:
+    w = week
+    m = month
+    y = year
     """
-    print("-------- WEB SEARCH --------")
-    print(query, search_period)
-    wrapper = DuckDuckGoSearchAPIWrapper(region="kr-kr", time=search_period)
-    search  = DuckDuckGoSearchResults(api_wrapper=wrapper, results_separator=";\n")
+
+    wrapper = DuckDuckGoSearchAPIWrapper(
+        region="kr-kr",
+        time=search_period,
+    )
+
+    search = DuckDuckGoSearchResults(
+        api_wrapper=wrapper,
+        results_separator=";\n",
+    )
+
     return search.invoke(query)
 
 
 @tool
-def get_youtube_search(query: str) -> List:
-    """
-    유튜브 검색 후 영상 내용(자막)을 반환하는 함수.
+def get_youtube_search(
+    query: str,
+) -> List:
 
-    Args:
-        query (str): 검색어
+    videos = YoutubeSearch(
+        query,
+        max_results=5,
+    ).to_dict()
 
-    Returns:
-        List: 자막이 포함된 영상 목록
-    """
-    print("-------- YOUTUBE SEARCH --------")
-    print(query)
-    videos = YoutubeSearch(query, max_results=5).to_dict()
-    # 1시간 미만 영상만 처리 (duration 문자열 길이 5 이하 = "MM:SS")
-    videos = [v for v in videos if len(v["duration"]) <= 5]
+    videos = [
+        v
+        for v in videos
+        if len(v["duration"]) <= 5
+    ]
+
+    results = []
+
     for video in videos:
-        video_url = "http://youtube.com" + video["url_suffix"]
-        loader = YoutubeLoader.from_youtube_url(video_url, language=["ko", "en"])
-        video["video_url"] = video_url
-        video["content"]   = loader.load()
-    return videos
+
+        try:
+
+            video_url = (
+                "https://youtube.com"
+                + video["url_suffix"]
+            )
+
+            loader = (
+                YoutubeLoader
+                .from_youtube_url(
+                    video_url,
+                    language=["ko", "en"]
+                )
+            )
+
+            docs = loader.load()
+
+            results.append(
+                {
+                    "title":
+                    video.get("title"),
+
+                    "url":
+                    video_url,
+
+                    "content":
+                    docs[0].page_content[:3000]
+                    if docs else ""
+                }
+            )
+
+        except Exception:
+            pass
+
+    return results
 
 
-# ── 도구 등록 ─────────────────────────────────────────────────
-tools     = [get_current_time, get_web_search, get_youtube_search]
-tool_dict = {t.name: t for t in tools}
+# ============================================================
+# TOOL 등록
+# ============================================================
 
-llm_with_tools = llm.bind_tools(tools)
+tools = [
+    get_current_time,
+    get_web_search,
+    get_youtube_search,
+]
 
+tool_dict = {
+    t.name: t
+    for t in tools
+}
 
-# ── RAG + 에이전트 통합 프롬프트 ─────────────────────────────
-SYSTEM_TEMPLATE = """너는 사용자를 돕기 위해 최선을 다하는 인공지능 봇이다.
+llm_with_tools = llm.bind_tools(
+    tools
+)
 
-아래는 문서에서 검색한 관련 내용이다. 질문에 관련이 있으면 참고하여 답변하라:
+# ============================================================
+# SYSTEM PROMPT
+# ============================================================
+
+SYSTEM_TEMPLATE = """
+너는 사용자를 돕는 AI Assistant이다.
+
+아래는 RAG 검색 결과이다.
+
 {rag_context}
+
+문서 내용이 질문과 관련 있다면
+반드시 참고하여 답변하라.
 """
 
+# ============================================================
+# RUN
+# ============================================================
 
-# ── 핵심 실행 함수 ────────────────────────────────────────────
-def run(query: str, history: list) -> dict:
-    """
-    GAS에서 전달받은 query + history를 처리하여
-    최종 답변과 도구 로그를 반환합니다.
+def run(
+    query: str,
+    history: list,
+) -> dict:
 
-    Args:
-        query   (str) : 사용자의 최신 질문
-        history (list): [{"role": "user"|"assistant", "content": "..."}]
-
-    Returns:
-        dict: {"answer": str, "tool_log": [...], "augmented_query": str}
-    """
-    # ── GAS 히스토리 → LangChain 메시지 변환 ─────────────────
     lc_history = []
+
     for msg in history:
+
         if msg["role"] == "user":
-            lc_history.append(HumanMessage(content=msg["content"]))
+
+            lc_history.append(
+                HumanMessage(
+                    content=msg["content"]
+                )
+            )
+
         elif msg["role"] == "assistant":
-            lc_history.append(AIMessage(content=msg["content"]))
 
-    # ── ① RAG: 질문 정제 → 문서 검색 ────────────────────────
-    augmented_query = rag.query_augmentation_chain.invoke({
-        "messages": lc_history,
-        "query": query,
-    })
-    docs = rag.retriever.invoke(f"{query}\n{augmented_query}")
+            lc_history.append(
+                AIMessage(
+                    content=msg["content"]
+                )
+            )
 
-    # 검색된 문서를 텍스트로 합치기
+    augmented_query = (
+        query_augmentation_chain.invoke(
+            {
+                "messages":
+                lc_history,
+
+                "query":
+                query,
+            }
+        )
+    )
+
+    docs = retriever.invoke(
+        f"{query}\n{augmented_query}"
+    )
+
     rag_context = "\n\n".join(
-        [f"[문서 {i+1}]\n{doc.page_content}" for i, doc in enumerate(docs)]
-    ) if docs else "관련 문서 없음"
+        [
+            f"[문서 {i+1}]\n{doc.page_content}"
+            for i, doc in enumerate(docs)
+        ]
+    )
 
-    # ── ② 에이전트 메시지 구성 ───────────────────────────────
-    system_msg = SystemMessage(SYSTEM_TEMPLATE.format(rag_context=rag_context))
-    lc_messages = [system_msg] + lc_history + [HumanMessage(content=query)]
+    if not rag_context:
+        rag_context = "관련 문서 없음"
 
-    # ── ③ 도구 사이클 실행 ───────────────────────────────────
+    system_msg = SystemMessage(
+        content=SYSTEM_TEMPLATE.format(
+            rag_context=rag_context
+        )
+    )
+
+    messages = (
+        [system_msg]
+        + lc_history
+        + [HumanMessage(content=query)]
+    )
+
     tool_log = []
-    _run_loop(lc_messages, tool_log)
 
-    # 마지막 AIMessage 텍스트가 최종 답변
-    for msg in reversed(lc_messages):
-        if isinstance(msg, AIMessage) and msg.content:
+    _run_loop(
+        messages,
+        tool_log,
+    )
+
+    for msg in reversed(messages):
+
+        if (
+            isinstance(msg, AIMessage)
+            and msg.content
+        ):
+
             return {
-                "answer": msg.content,
-                "tool_log": tool_log,
-                "augmented_query": augmented_query,
+                "answer":
+                msg.content,
+
+                "tool_log":
+                tool_log,
+
+                "augmented_query":
+                augmented_query,
             }
 
-    return {"answer": "(응답 없음)", "tool_log": tool_log, "augmented_query": augmented_query}
+    return {
+        "answer":
+        "(응답 없음)",
+
+        "tool_log":
+        tool_log,
+
+        "augmented_query":
+        augmented_query,
+    }
 
 
-def _run_loop(messages: list, tool_log: list, depth: int = 0) -> None:
-    """tool_call 사이클을 재귀 처리 (최대 5회)."""
+# ============================================================
+# TOOL LOOP
+# ============================================================
+
+def _run_loop(
+    messages,
+    tool_log,
+    depth=0,
+):
+
     if depth >= 5:
         return
 
-    response = llm_with_tools.invoke(messages)
+    response = llm_with_tools.invoke(
+        messages
+    )
+
     messages.append(response)
 
     if not response.tool_calls:
-        return  # 도구 호출 없음 → 종료
+        return
 
     for tool_call in response.tool_calls:
-        name          = tool_call["name"]
-        selected_tool = tool_dict[name]
-        tool_msg      = selected_tool.invoke(tool_call)
 
-        try:
-            result_for_log = tool_msg.content
-        except Exception:
-            result_for_log = str(tool_msg)
+        tool_name = tool_call["name"]
 
-        tool_log.append({"tool": name, "result": result_for_log})
-        messages.append(tool_msg)
+        selected_tool = (
+            tool_dict[tool_name]
+        )
 
-    _run_loop(messages, tool_log, depth + 1)
+        tool_result = (
+            selected_tool.invoke(
+                tool_call
+            )
+        )
+
+        tool_log.append(
+            {
+                "tool":
+                tool_name,
+
+                "result":
+                str(tool_result),
+            }
+        )
+
+        messages.append(tool_result)
+
+    _run_loop(
+        messages,
+        tool_log,
+        depth + 1,
+    )
