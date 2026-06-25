@@ -1,3 +1,12 @@
+"""
+retriever.py
+────────────
+ChromaDB 벡터스토어 + RAG 체인 초기화 모듈.
+- Render는 /tmp 만 쓰기 가능 → persist_directory 기본값을 /tmp/chroma_store 로 변경
+- as_retriever(k=3) 문법 오류 수정 → search_kwargs={"k": 3}
+- vectorstore가 None 일 때 retriever 생성 시도 방어 처리
+"""
+
 import os
 from langchain_openai import OpenAIEmbeddings, ChatOpenAI
 from langchain_chroma import Chroma
@@ -7,19 +16,23 @@ from langchain.chains.combine_documents import create_stuff_documents_chain
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_core.output_parsers import StrOutputParser
 
-# 1. 설정
-persist_directory = os.getenv('CHROMA_PERSIST_DIR', '/tmp/chroma_store')  # ✅ Render는 /tmp 사용
-data_directory = './data'
+# ── 1. 설정 ───────────────────────────────────────────────────
+# Render 무료 플랜은 /tmp 만 쓰기 가능
+persist_directory = os.getenv("CHROMA_PERSIST_DIR", "/tmp/chroma_store")
+data_directory    = "./data"
 
-embedding = OpenAIEmbeddings(model='text-embedding-3-large')
-llm = ChatOpenAI(model="gpt-4o")
+embedding = OpenAIEmbeddings(model="text-embedding-3-large")
+llm       = ChatOpenAI(model="gpt-4o")
 
 
-# 2. 벡터스토어 빌드 함수
+# ── 2. 벡터스토어 빌드 함수 ───────────────────────────────────
 def build_vectorstore():
     print("데이터베이스를 새로 빌드합니다...")
+
     if not os.path.exists(data_directory):
-        raise RuntimeError(f"'{data_directory}' 폴더가 없습니다. PDF 파일을 추가하세요.")
+        raise RuntimeError(
+            f"'{data_directory}' 폴더가 없습니다. PDF 파일을 추가하세요."
+        )
 
     documents = []
     for filename in os.listdir(data_directory):
@@ -32,8 +45,8 @@ def build_vectorstore():
     if not documents:
         raise RuntimeError(f"'{data_directory}' 폴더에 PDF 파일이 없습니다.")
 
-    text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
-    texts = text_splitter.split_documents(documents)
+    splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
+    texts    = splitter.split_documents(documents)
     print(f"  총 {len(texts)}개 청크 생성 완료")
 
     return Chroma.from_documents(
@@ -43,31 +56,32 @@ def build_vectorstore():
     )
 
 
-# 3. 벡터스토어 로드 or 빌드
-def get_vectorstore():
-    chroma_exists = (
-        os.path.exists(persist_directory)
-        and os.path.isdir(persist_directory)
-        and any(
-            f.endswith(".parquet") or f.endswith(".bin") or f == "chroma.sqlite3"
-            for root, _, files in os.walk(persist_directory)
-            for f in files
-        )
+# ── 3. 벡터스토어 로드 or 빌드 ────────────────────────────────
+def _chroma_exists() -> bool:
+    """persist_directory 안에 실제 DB 파일이 있는지 확인."""
+    if not os.path.isdir(persist_directory):
+        return False
+    for root, _, files in os.walk(persist_directory):
+        for f in files:
+            if f.endswith((".parquet", ".bin", ".sqlite3")):
+                return True
+    return False
+
+
+if _chroma_exists():
+    print("기존 데이터베이스를 불러옵니다.")
+    vectorstore = Chroma(
+        persist_directory=persist_directory,
+        embedding_function=embedding,
     )
-    if chroma_exists:
-        print("기존 데이터베이스를 불러옵니다.")
-        return Chroma(persist_directory=persist_directory, embedding_function=embedding)
-    else:
-        return build_vectorstore()
+else:
+    vectorstore = build_vectorstore()
 
-
-vectorstore = get_vectorstore()
-
-# ✅ k=3 올바른 문법
+# ✅ 수정: k=3 → search_kwargs={"k": 3}
 retriever = vectorstore.as_retriever(search_kwargs={"k": 3})
 
 
-# 4. 체인 구성
+# ── 4. RAG 체인 구성 ──────────────────────────────────────────
 question_answering_prompt = ChatPromptTemplate.from_messages([
     ("system", "사용자의 질문에 대해 아래 context에 기반하여 답변하라.:\n\n{context}"),
     MessagesPlaceholder(variable_name="messages"),
