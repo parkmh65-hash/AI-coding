@@ -38,6 +38,11 @@ from rag import agent
 app = FastAPI(
     title="GPT Agent API"
 )
+# --- 이 부분을 추가해 주세요 ---
+@app.get("/")
+def health_check():
+    return {"status": "ok"}
+# -----------------------------
 
 app.add_middleware(
     CORSMiddleware,
