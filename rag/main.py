@@ -2,57 +2,64 @@ import sys
 import os
 
 from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from typing import List
+from typing import List, Literal, Any
 
-# 1. 경로 설정
+# ── 1. API 키 설정 (retriever import 전에 먼저!) ───────────────
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
-# 2. API 키 설정 (retriever import 전에 반드시 먼저 실행)
 api_key = os.getenv("OPENAI_API_KEY")
 if not api_key:
     raise RuntimeError("환경 변수 OPENAI_API_KEY가 설정되지 않았습니다.")
 os.environ["OPENAI_API_KEY"] = api_key.strip()
 
-import retriever  # ✅ 키 설정 후 import
+import agent   # ← retriever 대신 agent 모듈
 
-app = FastAPI()
+# ── 2. FastAPI 앱 ─────────────────────────────────────────────
+app = FastAPI(title="GPT-4o Langchain Chat API")
 
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["POST", "GET"],
+    allow_headers=["*"],
+)
+
+# ── 3. 스키마 ─────────────────────────────────────────────────
+class Message(BaseModel):
+    role: Literal["user", "assistant"]
+    content: str
 
 class ChatRequest(BaseModel):
     query: str
-    messages: List[dict]
+    messages: List[Message] = []
 
+class ToolLog(BaseModel):
+    tool: str
+    result: Any
 
+class ChatResponse(BaseModel):
+    answer: str
+    tool_log: List[ToolLog] = []
+
+# ── 4. 엔드포인트 ─────────────────────────────────────────────
 @app.get("/health")
 async def health():
-    """Render 헬스체크용 엔드포인트"""
     return {"status": "ok"}
 
-
-@app.post("/chat")
+@app.post("/chat", response_model=ChatResponse)
 async def chat(request: ChatRequest):
     try:
-        # RAG 파이프라인
-        augmented_query = retriever.query_augmentation_chain.invoke({
-            "messages": request.messages,
-            "query": request.query,
-        })
-
-        docs = retriever.retriever.invoke(f"{request.query}\n{augmented_query}")
-
-        response = retriever.document_chain.invoke({
-            "messages": request.messages,
-            "context": docs,
-        })
-
-        return {"answer": response, "augmented_query": augmented_query}
-
+        result = agent.run(request.query, request.messages)
+        return ChatResponse(
+            answer=result["answer"],
+            tool_log=result.get("tool_log", []),
+        )
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-
-# 3. 서버 실행
+# ── 5. 로컬 실행 ──────────────────────────────────────────────
 if __name__ == "__main__":
     import uvicorn
     port = int(os.environ.get("PORT", 8000))
