@@ -1,39 +1,45 @@
-from fastapi import FastAPI
-from pydantic import BaseModel
-from typing import List, Any
-from langchain_openai import ChatOpenAI
-
-
-# retriever 모듈은 별도 파일로 구성하여 import 하세요 [cite: 30]
-# 현재 파일이 있는 디렉토리를 파이썬 경로에 추가
 import sys
 import os
+from fastapi import FastAPI
+from pydantic import BaseModel
+from typing import List
+from langchain_openai import ChatOpenAI
 
+# 1. 경로 설정 (필수)
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
-import retriever 
+import retriever
 
 app = FastAPI()
 
+# 2. 키 정제 (보안 및 에러 방지)
+# Render 환경 변수에 OPENAI_API_KEY가 설정되어 있어야 합니다.
+api_key = os.getenv("OPENAI_API_KEY")
+if api_key:
+    os.environ["OPENAI_API_KEY"] = api_key.strip() 
+
 class ChatRequest(BaseModel):
     query: str
-    messages: List[dict] # 대화 기록을 클라이언트에서 받음
+    messages: List[dict]
 
 @app.post("/chat")
 async def chat(request: ChatRequest):
-    # 1. 쿼리 증강 (Query Augmentation)
+    # RAG 파이프라인 호출
     augmented_query = retriever.query_augmentation_chain.invoke({
         "messages": request.messages,
         "query": request.query,
     })
 
-    # 2. 문서 검색
     docs = retriever.retriever.invoke(f"{request.query}\n{augmented_query}")
     
-    # 3. 답변 생성
-    # stream 대신 전체 결과를 한 번에 받아 반환
     response = retriever.document_chain.invoke({
         "messages": request.messages,
         "context": docs
     })
     
     return {"answer": response, "augmented_query": augmented_query}
+
+# 3. 서버 실행 코드 추가
+if __name__ == "__main__":
+    import uvicorn
+    port = int(os.environ.get("PORT", 8000))
+    uvicorn.run(app, host="0.0.0.0", port=port)
