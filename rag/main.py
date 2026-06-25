@@ -25,7 +25,7 @@ if not api_key:
 os.environ["OPENAI_API_KEY"] = api_key.strip()
 
 import agent   # 키 설정 완료 후 import
-import retriever
+
 # ── 2. FastAPI 앱 ─────────────────────────────────────────────
 app = FastAPI(title="GPT-4o Langchain Chat API")
 
@@ -65,8 +65,7 @@ async def chat(request: ChatRequest):
     try:
         # Pydantic 모델 → dict 변환 후 agent.run() 에 전달
         history = [{"role": m.role, "content": m.content} for m in request.messages]
-        result  = agent.run(request.query, history)
-
+        result = agent.run(request.query,history)
         return ChatResponse(
             answer          = result["answer"],
             augmented_query = result.get("augmented_query", ""),
