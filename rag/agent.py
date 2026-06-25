@@ -532,34 +532,63 @@ def _run_loop(
     depth=0,
 ):
 
+    print("TOOL LOOP", depth)
+
     if depth >= 5:
         return
+
 
     response = llm_with_tools.invoke(
         messages
     )
 
+
     messages.append(response)
+
 
     if not response.tool_calls:
         return
+
 
     for tool_call in response.tool_calls:
 
         tool_name = tool_call["name"]
 
-        tool_result = tool_dict[
+        print(
+            "CALL TOOL:",
             tool_name
-        ].invoke(tool_call)
+        )
+
+
+        selected_tool = tool_dict.get(
+            tool_name
+        )
+
+
+        if selected_tool is None:
+            continue
+
+
+        tool_result = selected_tool.invoke(
+            tool_call
+        )
+
 
         tool_log.append(
             {
-                "tool": tool_name,
-                "result": str(tool_result),
+                "tool":
+                    tool_name,
+
+                "result":
+                    str(tool_result),
             }
         )
 
-        messages.append(tool_result)
+
+        messages.append(
+            tool_result
+        )
+
 
     _run_loop(
         messages,
