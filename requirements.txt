@@ -7,6 +7,7 @@ python-dotenv
 yfinance
 tabulate
 pydantic
+pypdf
 
 openai>=1.40.0,<2.0.0
 
