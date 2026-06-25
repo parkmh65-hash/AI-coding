@@ -1,15 +1,14 @@
 """
 agent.py
 ───────────────────────────────────────────────
-RAG + Tool Agent 통합 버전
+RAG + Tool Agent 통합 버전 (Render 최적화)
 
-포함 기능
-- ChromaDB
-- Query Augmentation
-- Time Tool
-- Web Search Tool
-- Youtube Tool
-- Tool Calling Agent
+변경사항
+- Lazy Loading 적용
+- import 시 Chroma 생성 안함
+- import 시 PDF 로딩 안함
+- import 시 Embedding 생성 안함
+- 첫 질문 시 RAG 초기화
 """
 
 import os
@@ -67,10 +66,14 @@ from youtube_search import YoutubeSearch
 
 llm = ChatOpenAI(model="gpt-4o-mini")
 
-rag_llm = ChatOpenAI(model="gpt-4o")
+rag_llm = None
+embedding = None
+
+vectorstore = None
+retriever = None
 
 # ============================================================
-# RAG 초기화
+# PATH
 # ============================================================
 
 persist_directory = os.getenv(
@@ -79,21 +82,41 @@ persist_directory = os.getenv(
 )
 
 BASE_DIR = Path(__file__).resolve().parent
-
 data_directory = BASE_DIR / "data"
-
-embedding = OpenAIEmbeddings(
-    model="text-embedding-3-large"
-)
 
 
 # ============================================================
-# Vector Store 생성
+# Lazy Loading
+# ============================================================
+
+def get_embedding():
+    global embedding
+
+    if embedding is None:
+        print("Embedding 초기화")
+        embedding = OpenAIEmbeddings(
+            model="text-embedding-3-large"
+        )
+
+    return embedding
+
+
+def get_rag_llm():
+    global rag_llm
+
+    if rag_llm is None:
+        rag_llm = ChatOpenAI(model="gpt-4o")
+
+    return rag_llm
+
+
+# ============================================================
+# VectorStore
 # ============================================================
 
 def build_vectorstore():
 
-    print("새로운 벡터 DB 생성")
+    print("새로운 Vector DB 생성")
 
     documents = []
 
@@ -111,9 +134,7 @@ def build_vectorstore():
         documents.extend(loader.load())
 
     if not documents:
-        raise RuntimeError(
-            "PDF 문서가 없습니다."
-        )
+        raise RuntimeError("PDF 문서가 없습니다.")
 
     splitter = RecursiveCharacterTextSplitter(
         chunk_size=1000,
@@ -122,11 +143,11 @@ def build_vectorstore():
 
     texts = splitter.split_documents(documents)
 
-    print(f"청크 수: {len(texts)}")
+    print(f"총 청크 수: {len(texts)}")
 
     return Chroma.from_documents(
         documents=texts,
-        embedding=embedding,
+        embedding=get_embedding(),
         persist_directory=persist_directory,
     )
 
@@ -150,23 +171,43 @@ def chroma_exists():
     return False
 
 
-if chroma_exists():
+def init_rag():
 
-    print("기존 Chroma DB 로드")
+    global vectorstore
+    global retriever
 
-    vectorstore = Chroma(
-        persist_directory=persist_directory,
-        embedding_function=embedding,
+    if retriever is not None:
+        return
+
+    print("================================")
+    print("RAG 초기화 시작")
+    print("================================")
+
+    emb = get_embedding()
+
+    if chroma_exists():
+
+        print("기존 Chroma DB 로드")
+
+        vectorstore = Chroma(
+            persist_directory=persist_directory,
+            embedding_function=emb,
+        )
+
+    else:
+
+        print("새 Chroma DB 생성")
+
+        vectorstore = build_vectorstore()
+
+    retriever = vectorstore.as_retriever(
+        search_kwargs={"k": 3}
     )
 
-else:
+    print("================================")
+    print("RAG 초기화 완료")
+    print("================================")
 
-    vectorstore = build_vectorstore()
-
-
-retriever = vectorstore.as_retriever(
-    search_kwargs={"k": 3}
-)
 
 # ============================================================
 # Query Augmentation
@@ -185,20 +226,24 @@ query_augmentation_prompt = (
 검색에 적합한 한 문장으로 변환하라.
 
 {query}
-                """
+"""
             ),
         ]
     )
 )
 
-query_augmentation_chain = (
-    query_augmentation_prompt
-    | rag_llm
-    | StrOutputParser()
-)
+
+def get_query_chain():
+
+    return (
+        query_augmentation_prompt
+        | get_rag_llm()
+        | StrOutputParser()
+    )
+
 
 # ============================================================
-# TOOL
+# TOOLS
 # ============================================================
 
 @tool
@@ -206,7 +251,7 @@ def get_current_time(
     timezone: str,
     location: str,
 ) -> str:
-    """현재 시간을 반환"""
+    """현재 시간 반환"""
 
     try:
 
@@ -230,14 +275,6 @@ def get_web_search(
     query: str,
     search_period: str,
 ) -> str:
-    """
-    웹 검색
-
-    search_period:
-    w = week
-    m = month
-    y = year
-    """
 
     wrapper = DuckDuckGoSearchAPIWrapper(
         region="kr-kr",
@@ -262,12 +299,6 @@ def get_youtube_search(
         max_results=5,
     ).to_dict()
 
-    videos = [
-        v
-        for v in videos
-        if len(v["duration"]) <= 5
-    ]
-
     results = []
 
     for video in videos:
@@ -279,24 +310,17 @@ def get_youtube_search(
                 + video["url_suffix"]
             )
 
-            loader = (
-                YoutubeLoader
-                .from_youtube_url(
-                    video_url,
-                    language=["ko", "en"]
-                )
+            loader = YoutubeLoader.from_youtube_url(
+                video_url,
+                language=["ko", "en"]
             )
 
             docs = loader.load()
 
             results.append(
                 {
-                    "title":
-                    video.get("title"),
-
-                    "url":
-                    video_url,
-
+                    "title": video.get("title"),
+                    "url": video_url,
                     "content":
                     docs[0].page_content[:3000]
                     if docs else ""
@@ -329,28 +353,26 @@ llm_with_tools = llm.bind_tools(
 )
 
 # ============================================================
-# SYSTEM PROMPT
+# SYSTEM
 # ============================================================
 
 SYSTEM_TEMPLATE = """
 너는 사용자를 돕는 AI Assistant이다.
 
-아래는 RAG 검색 결과이다.
+RAG 검색 결과:
 
 {rag_context}
 
-문서 내용이 질문과 관련 있다면
-반드시 참고하여 답변하라.
+관련 내용이 있으면 반드시 활용하라.
 """
 
 # ============================================================
 # RUN
 # ============================================================
 
-def run(
-    query: str,
-    history: list,
-) -> dict:
+def run(query: str, history: list):
+
+    init_rag()
 
     lc_history = []
 
@@ -373,13 +395,10 @@ def run(
             )
 
     augmented_query = (
-        query_augmentation_chain.invoke(
+        get_query_chain().invoke(
             {
-                "messages":
-                lc_history,
-
-                "query":
-                query,
+                "messages": lc_history,
+                "query": query,
             }
         )
     )
@@ -398,16 +417,17 @@ def run(
     if not rag_context:
         rag_context = "관련 문서 없음"
 
-    system_msg = SystemMessage(
-        content=SYSTEM_TEMPLATE.format(
-            rag_context=rag_context
+    messages = [
+        SystemMessage(
+            content=SYSTEM_TEMPLATE.format(
+                rag_context=rag_context
+            )
         )
-    )
+    ]
 
-    messages = (
-        [system_msg]
-        + lc_history
-        + [HumanMessage(content=query)]
+    messages.extend(lc_history)
+    messages.append(
+        HumanMessage(content=query)
     )
 
     tool_log = []
@@ -423,33 +443,18 @@ def run(
             isinstance(msg, AIMessage)
             and msg.content
         ):
-
             return {
-                "answer":
-                msg.content,
-
-                "tool_log":
-                tool_log,
-
-                "augmented_query":
-                augmented_query,
+                "answer": msg.content,
+                "tool_log": tool_log,
+                "augmented_query": augmented_query,
             }
 
     return {
-        "answer":
-        "(응답 없음)",
-
-        "tool_log":
-        tool_log,
-
-        "augmented_query":
-        augmented_query,
+        "answer": "(응답 없음)",
+        "tool_log": tool_log,
+        "augmented_query": augmented_query,
     }
 
-
-# ============================================================
-# TOOL LOOP
-# ============================================================
 
 def _run_loop(
     messages,
@@ -473,23 +478,14 @@ def _run_loop(
 
         tool_name = tool_call["name"]
 
-        selected_tool = (
-            tool_dict[tool_name]
-        )
-
-        tool_result = (
-            selected_tool.invoke(
-                tool_call
-            )
-        )
+        tool_result = tool_dict[
+            tool_name
+        ].invoke(tool_call)
 
         tool_log.append(
             {
-                "tool":
-                tool_name,
-
-                "result":
-                str(tool_result),
+                "tool": tool_name,
+                "result": str(tool_result),
             }
         )
 
