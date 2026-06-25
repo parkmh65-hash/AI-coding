@@ -2,8 +2,7 @@ import os
 from langchain_openai import OpenAIEmbeddings, ChatOpenAI
 from langchain_chroma import Chroma
 from langchain_community.document_loaders import PyPDFLoader # PDF 로더 예시
-from langchain.text_splitter import RecursiveCharacterTextSplitter
-
+from langchain_text_splitters import RecursiveCharacterTextSplitter
 # 1. 환경 변수 및 설정
 # 데이터베이스 폴더 경로
 persist_directory = os.getenv('CHROMA_PERSIST_DIR', './chroma_store')
