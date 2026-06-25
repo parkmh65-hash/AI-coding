@@ -5,8 +5,8 @@ from langchain_community.document_loaders import PyPDFLoader # PDF 로더 예시
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 
 # 1. 환경 변수 및 설정
-persist_directory = os.getenv('CHROMA_PERSIST_DIR', './rag/chroma_store')
-data_directory = './rag/data' # 원본 문서(PDF 등)를 넣어둘 폴더
+persist_directory = os.getenv('CHROMA_PERSIST_DIR', './chroma_store')
+data_directory = './data' # 원본 문서(PDF 등)를 넣어둘 폴더
 embedding = OpenAIEmbeddings(model='text-embedding-3-large')
 
 # 2. 자동 빌드 함수
