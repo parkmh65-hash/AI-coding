@@ -33,9 +33,7 @@ if not api_key:
     )
 
 os.environ["OPENAI_API_KEY"] = api_key
-
-import agent
-
+from rag import agent
 
 app = FastAPI(
     title="GPT Agent API"
