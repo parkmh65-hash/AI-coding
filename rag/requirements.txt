@@ -8,3 +8,4 @@ langchain-chroma
 langchain-community
 langchain-core
 langchain-text-splitters
+chromadb==0.5.5
