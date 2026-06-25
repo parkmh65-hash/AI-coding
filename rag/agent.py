@@ -246,12 +246,26 @@ def get_query_chain():
 # TOOLS
 # ============================================================
 
+
 @tool
 def get_current_time(
     timezone: str,
     location: str,
 ) -> str:
-    """현재 시간 반환"""
+    """
+    현재 시간을 반환하는 도구.
+
+    Args:
+        timezone:
+            pytz 형식의 타임존
+            예: Asia/Seoul
+
+        location:
+            지역명
+
+    Returns:
+        현재 시간 문자열
+    """
 
     try:
 
@@ -270,36 +284,68 @@ def get_current_time(
         return "알 수 없는 타임존"
 
 
+
 @tool
 def get_web_search(
     query: str,
     search_period: str,
 ) -> str:
+    """
+    인터넷 검색을 수행하는 도구.
+
+    Args:
+        query:
+            검색할 질문 또는 키워드
+
+        search_period:
+            검색 기간
+            w = 최근 1주
+            m = 최근 1개월
+            y = 최근 1년
+
+    Returns:
+        웹 검색 결과
+    """
 
     wrapper = DuckDuckGoSearchAPIWrapper(
         region="kr-kr",
         time=search_period,
     )
 
+
     search = DuckDuckGoSearchResults(
         api_wrapper=wrapper,
         results_separator=";\n",
     )
 
+
     return search.invoke(query)
+
 
 
 @tool
 def get_youtube_search(
     query: str,
 ) -> List:
+    """
+    유튜브 영상을 검색하고 자막을 가져오는 도구.
+
+    Args:
+        query:
+            검색할 영상 주제
+
+    Returns:
+        영상 제목, URL, 자막 정보 목록
+    """
 
     videos = YoutubeSearch(
         query,
         max_results=5,
     ).to_dict()
 
+
     results = []
+
 
     for video in videos:
 
@@ -310,25 +356,35 @@ def get_youtube_search(
                 + video["url_suffix"]
             )
 
+
             loader = YoutubeLoader.from_youtube_url(
                 video_url,
                 language=["ko", "en"]
             )
 
+
             docs = loader.load()
+
 
             results.append(
                 {
-                    "title": video.get("title"),
-                    "url": video_url,
+                    "title":
+                        video.get("title"),
+
+                    "url":
+                        video_url,
+
                     "content":
-                    docs[0].page_content[:3000]
-                    if docs else ""
+                        docs[0].page_content[:3000]
+                        if docs else ""
                 }
             )
 
+
         except Exception:
+
             pass
+
 
     return results
 
