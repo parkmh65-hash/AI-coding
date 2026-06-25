@@ -1,19 +1,17 @@
-fastapi
-uvicorn
+fastapi==0.104.1
+uvicorn==0.23.2
 pandas
 scikit-learn
 google-genai
-openai
 python-dotenv
 yfinance
 tabulate
-langchain-openai
 pydantic
 
-fastapi==0.104.1
-uvicorn==0.23.2
+openai>=1.40.0,<2.0.0
+
 langchain==0.3.0
 langchain-openai==0.2.0
-openai>=1.40.0,<2.0.0
-langchain-chroma
+
 chromadb==0.5.5
+langchain-chroma==0.1.2
