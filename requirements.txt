@@ -7,12 +7,13 @@ python-dotenv
 yfinance
 tabulate
 pydantic
-pypdf
 
+
+fastapi
+uvicorn
 openai
-
 langchain
 langchain-openai
-
-chromadb
 langchain-chroma
+langchain-core
+pypdf
