@@ -23,5 +23,8 @@ pypdf
 # ── 도구 ──────────────────────────────────────────────────────
 duckduckgo-search
 youtube-search
+youtube-transcript-api
+
 pytube
 pytz
+
