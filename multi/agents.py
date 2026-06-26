@@ -3,7 +3,7 @@ from langchain_core.prompts import PromptTemplate
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.messages import AIMessage
 
-from .utils import (
+from multi.utils import (
     get_outline,
     save_outline
 )
