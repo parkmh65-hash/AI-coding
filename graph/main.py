@@ -8,7 +8,7 @@ from langchain_openai import ChatOpenAI
 from langgraph.graph import StateGraph, START, END
 from langgraph.graph.message import add_messages
 from langgraph.checkpoint.memory import MemorySaver
-from langchain.schema import HumanMessage
+from langchain_core.messages import HumanMessage
 
 # FastAPI 앱 초기화
 app = FastAPI(title="LangGraph API for GAS")
