@@ -13,6 +13,11 @@ from langchain_core.messages import HumanMessage
 # FastAPI 앱 초기화
 app = FastAPI(title="LangGraph API for GAS")
 
+# 헬스 체크 엔드포인트 추가
+@app.get("/healthz")
+def health_check():
+    return {"status": "ok"}
+    
 # 환경 변수에서 OpenAI API 키 확인 (Render의 Environment Variables에 설정해야 함)
 if "OPENAI_API_KEY" not in os.environ:
     print("경고: OPENAI_API_KEY가 환경 변수에 설정되지 않았습니다.")
