@@ -21,10 +21,9 @@ chromadb>=0.6.0          # 0.5.5 는 langchain-chroma 와 호환 안 됨
 pypdf
 
 # ── 도구 ──────────────────────────────────────────────────────
-duckduckgo-search==5.3.1
+ddgs>=9.0.0
 youtube-search
 youtube-transcript-api
 
 pytube
 pytz
-
