@@ -19,6 +19,10 @@ app = FastAPI(
     title="Book Writer Agent"
 )
 
+# 헬스 체크 엔드포인트 추가
+@app.get("/healthz")
+def health_check():
+    return {"status": "ok"}
 
 class ChatRequest(BaseModel):
 
