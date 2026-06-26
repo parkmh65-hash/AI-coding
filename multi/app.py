@@ -6,7 +6,7 @@ from langchain_core.messages import (
     SystemMessage
 )
 
-from .workflow.graph import graph
+from graph import graph
 from utils import (
     load_state,
     save_state
