@@ -1,14 +1,10 @@
 fastapi
 uvicorn[standard]
-
 openai
-
 langchain
 langchain-core
 langchain-openai
 langchain-community
-langchain-classic
-
+langgraph
 pydantic>=2
-
 python-dotenv
