@@ -498,7 +498,19 @@ def run(query: str, history: list):
     )
 
     tool_log = []
-
+# 👇👇👇 [여기에 아래 9줄의 코드를 추가해 주세요!] 👇👇👇
+    
+    # 1. AI에게 도구 사용 루프를 실행시킵니다.
+    _run_loop(messages, tool_log)
+    
+    # 2. 루프가 끝난 뒤, 가장 마지막에 추가된 메시지(AI의 최종 답변)를 꺼내서 반환합니다.
+    return {
+        "answer": messages[-1].content,
+        "augmented_query": augmented_query,
+        "tool_log": tool_log
+    }
+    
+    # 👆👆👆 [추가할 코드 끝] 👆👆👆
 # ============================================================
 # TOOL LOOP
 # ============================================================
