@@ -90,43 +90,31 @@ async def root():
     }
 
 
-@app.post(
-    "/chat",
-    response_model=ChatResponse
-)
-async def chat(
-    request: ChatRequest
-):
-
+@app.post("/chat", response_model=ChatResponse)
+async def chat(request: ChatRequest):
     try:
-
         history = [
-            {
-                "role": m.role,
-                "content": m.content,
-            }
+            {"role": m.role, "content": m.content}
             for m in request.messages
         ]
 
-        result = agent.run(
-            request.query,
-            history,
-        )
+        result = agent.run(request.query, history)
+
+        # 👉 [수정된 부분] result가 None인지 먼저 확인하는 방어 코드 추가!
+        if result is None:
+            return ChatResponse(
+                answer="죄송합니다. AI가 답변을 생성하는 도중 문제가 발생했습니다. (LLM 반환값 없음)",
+                augmented_query="",
+                tool_log=[]
+            )
 
         return ChatResponse(
-            answer=result["answer"],
-            augmented_query=result.get(
-                "augmented_query",
-                ""
-            ),
-            tool_log=result.get(
-                "tool_log",
-                []
-            ),
+            answer=result.get("answer", "답변을 찾을 수 없습니다."), # get을 쓰면 더 안전합니다.
+            augmented_query=result.get("augmented_query", ""),
+            tool_log=result.get("tool_log", []),
         )
 
     except Exception as e:
-
         raise HTTPException(
             status_code=500,
             detail=str(e),
