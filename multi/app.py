@@ -16,14 +16,17 @@ from datetime import datetime
 import os
 import uvicorn
 
-if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 8080))
-    uvicorn.run("main:app", host="0.0.0.0", port=port)
-
+# ✅ 수정 - app 정의 뒤로 이동
 app = FastAPI(
     title="Book Writer Agent"
 )
+@app.get("/")
+def home(): ...
 
+if __name__ == "__main__":
+    port = int(os.environ.get("PORT", 8080))
+    uvicorn.run("main:app", host="0.0.0.0", port=port)
+    
 # 헬스 체크 엔드포인트 추가
 @app.get("/healthz")
 def health_check():
